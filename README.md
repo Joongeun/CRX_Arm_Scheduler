@@ -85,18 +85,23 @@ Share that link. Anyone who opens it can book — no account, no sign-in.
 - **Drag across your own slots** to release them.
 - **Right-click any slot** to force-clear it, including someone else's. You'll get a
   confirmation prompt first.
-- **Release all my slots** in the sidebar wipes your bookings for the week.
+- **Release my slots this week** in the sidebar wipes your bookings in the week shown.
+- **‹ and ›** above the board move between weeks.
 
 Each person gets a color derived from their name, so the board reads at a glance.
 
 Hours that have already passed grey out and can't be booked.
 
-### Weekly reset
+### Weeks and past days
 
-Slots are stored under the date of that week's Monday, in US Pacific time. When the
-clock rolls past Sunday midnight the page switches to the new week's empty board on
-its own — even in a tab that's been left open. Week documents older than three weeks
-are deleted automatically to keep the database small.
+The arrows above the board move between weeks. You can go forward as far as you like,
+but not back past the current week. The board opens on today, and days that have
+already passed are not shown. At midnight Pacific, yesterday's column drops off on its
+own, even in a tab that has been left open.
+
+Each week is stored as one Firestore document, keyed by that week's Monday. A document
+is created only when someone books a slot in that week, so browsing ahead costs
+nothing. Week documents older than three weeks are deleted automatically.
 
 ---
 

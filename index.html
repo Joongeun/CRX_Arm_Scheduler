@@ -82,6 +82,15 @@
   .roster{display:flex;flex-wrap:wrap;gap:6px}
   .rtag{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;padding:3px 9px 3px 5px;border-radius:999px;border:1px solid var(--border);background:var(--bg)}
 
+  .weeknav{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .weeknav .wl{font-weight:600;font-size:1rem;min-width:190px;text-align:center}
+  .navbtn{font:inherit;font-size:1.05rem;font-weight:600;width:36px;height:36px;border-radius:9px;cursor:pointer;
+          border:1px solid var(--border);background:var(--surface);color:var(--text);display:inline-flex;align-items:center;justify-content:center}
+  .navbtn:hover:not(:disabled){border-color:var(--accent);color:var(--accent-text)}
+  .navbtn:disabled{opacity:.35;cursor:default}
+  .navbtn.wide{width:auto;padding:0 12px;font-size:.84rem}
+  .navbtn[hidden]{display:none}
+
   .board{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
   .board-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .grid{display:grid;min-width:720px;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -117,7 +126,7 @@
   <header class="top">
     <div>
       <h1>CRX Arm Scheduler</h1>
-      <div class="sub" id="weekLabel">—</div>
+      <div class="sub">Book the arm by the hour. Times are US Pacific.</div>
     </div>
     <div class="status off" id="status"><span class="dot"></span><span id="statusTxt">connecting…</span></div>
   </header>
@@ -131,7 +140,7 @@
         <label class="fl" for="nameIn">Shown on every slot you take</label>
         <input id="nameIn" type="text" maxlength="24" placeholder="e.g. Joon" autocomplete="name" spellcheck="false">
         <div class="youare" id="youAre" hidden><span class="chip" id="youChip"></span><span id="youTxt"></span></div>
-        <button class="btn danger" id="clearMine" type="button">Release all my slots</button>
+        <button class="btn danger" id="clearMine" type="button">Release my slots this week</button>
       </div>
 
       <div class="card">
@@ -154,15 +163,21 @@
       </div>
 
       <div class="card" id="rosterCard" hidden>
-        <h2>On the arm this week</h2>
+        <h2>Booked this week</h2>
         <div class="roster" id="roster"></div>
       </div>
     </aside>
 
     <main>
+      <div class="weeknav">
+        <button class="navbtn" id="prevWeek" type="button" aria-label="Previous week">&lsaquo;</button>
+        <span class="wl" id="weekLabel">—</span>
+        <button class="navbtn" id="nextWeek" type="button" aria-label="Next week">&rsaquo;</button>
+        <button class="navbtn wide" id="thisWeek" type="button" hidden>Back to this week</button>
+      </div>
       <div class="board"><div class="board-scroll"><div class="grid" id="grid"></div></div></div>
       <footer class="note">
-        Times are US Pacific. The board clears itself every Monday at midnight — nobody has to reset it.
+        Use the arrows to book any future week. Days that have passed drop off the board on their own.
       </footer>
     </main>
   </div>
@@ -194,7 +209,9 @@ if (!myCid){ myCid = "c"+Math.random().toString(36).slice(2,10)+Date.now().toStr
 var myName = localStorage.getItem(LS_NAME) || "";
 
 // ---------- week math (Pacific, Monday-start) ----------
-var weekKey, monday, todayCiv, nowHour, todayIdx;
+// curMonday is the real current week. monday/weekKey are the week on screen,
+// which the arrows move forward without limit and back to the current week.
+var weekKey, monday, curMonday, todayCiv, nowHour, todayIdx;
 function tzNow(){
   var p={}; new Intl.DateTimeFormat("en-CA",{timeZone:TIMEZONE,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23"})
     .formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
@@ -205,9 +222,17 @@ function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate
 function addDays(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
 function computeWeek(){
   var n=tzNow(); var civ=new Date(n.y,n.m-1,n.d);
-  todayIdx=(civ.getDay()+6)%7; monday=addDays(civ,-todayIdx); todayCiv=civ; nowHour=n.h;
-  weekKey=ymd(monday);
+  todayIdx=(civ.getDay()+6)%7; curMonday=addDays(civ,-todayIdx); todayCiv=civ; nowHour=n.h;
 }
+// earliest week with a bookable day left (skips ahead on a weekend when DAY_COUNT is 5)
+function minMonday(){ return todayIdx>=DAY_COUNT ? addDays(curMonday,7) : curMonday; }
+function setView(m){
+  if (m.getTime()<minMonday().getTime()) m=minMonday();
+  monday=m; weekKey=ymd(monday);
+}
+function isCurrentView(){ return monday.getTime()===curMonday.getTime(); }
+// first column shown: today in the current week, Monday otherwise
+function firstDay(){ return isCurrentView() ? todayIdx : 0; }
 function dayDate(i){return addDays(monday,i);}
 function isPast(i,h){
   var c=dayDate(i).getTime(), t=todayCiv.getTime();
@@ -217,7 +242,7 @@ function isPast(i,h){
 }
 function cellId(i,h){return "d"+i+"h"+h;}
 function weekLabel(){
-  var a=monday,b=addDays(monday,DAY_COUNT-1),o={month:"short",day:"numeric"};
+  var a=dayDate(firstDay()),b=addDays(monday,DAY_COUNT-1),o={month:"short",day:"numeric"};
   return a.toLocaleDateString("en-US",o)+" – "+b.toLocaleDateString("en-US",o)+", "+b.getFullYear();
 }
 
@@ -235,16 +260,18 @@ function colorFor(n){ var d=document.documentElement; var dark=getComputedStyle(
 var gridEl=document.getElementById("grid");
 function buildGrid(){
   gridEl.innerHTML="";
-  gridEl.style.gridTemplateColumns="70px repeat("+DAY_COUNT+",minmax(88px,1fr))";
+  var f=firstDay(), cols=DAY_COUNT-f;
+  gridEl.style.gridTemplateColumns="70px repeat("+cols+",minmax(88px,1fr))";
+  gridEl.style.minWidth=Math.min(720,70+88*cols)+"px";
   var corner=document.createElement("div"); corner.className="hcell corner"; gridEl.appendChild(corner);
-  for (var i=0;i<DAY_COUNT;i++){
-    var hc=document.createElement("div"); hc.className="hcell"+(i===todayIdx?" today":"");
+  for (var i=f;i<DAY_COUNT;i++){
+    var hc=document.createElement("div"); hc.className="hcell"+(isCurrentView()&&i===todayIdx?" today":"");
     hc.innerHTML=DAY_NAMES[i]+'<span class="dt">'+dayDate(i).toLocaleDateString("en-US",{month:"numeric",day:"numeric"})+'</span>';
     gridEl.appendChild(hc);
   }
   HOURS.forEach(function(h){
     var tc=document.createElement("div"); tc.className="tcell"; tc.textContent=fmtHour(h); gridEl.appendChild(tc);
-    for (var i=0;i<DAY_COUNT;i++){
+    for (var i=f;i<DAY_COUNT;i++){
       var c=document.createElement("div"); c.className="cell";
       c.dataset.d=i; c.dataset.h=h; c.dataset.id=cellId(i,h);
       c.appendChild(Object.assign(document.createElement("span"),{className:"nm"}));
@@ -364,8 +391,8 @@ function commit(mode, ids){
 
 document.getElementById("clearMine").onclick=function(){
   var ids=Object.keys(slots).filter(function(id){return slots[id].cid===myCid;});
-  if(!ids.length){ toast("You don't have any slots this week."); return; }
-  if(!confirm("Release all "+ids.length+" of your slots this week?")) return;
+  if(!ids.length){ toast("You don't have any slots in the week shown."); return; }
+  if(!confirm("Release all "+ids.length+" of your slots in "+weekLabel()+"?")) return;
   commit("clear",ids);
 };
 
@@ -395,15 +422,30 @@ function requireName(){
   return false;
 }
 
-// ---------- weekly rollover ----------
+// ---------- week navigation ----------
+var prevBtn=document.getElementById("prevWeek"), nextBtn=document.getElementById("nextWeek"),
+    thisBtn=document.getElementById("thisWeek");
+function showWeek(m){
+  var prev=weekKey;
+  setView(m);
+  document.getElementById("weekLabel").textContent=weekLabel();
+  var atMin=monday.getTime()===minMonday().getTime();
+  prevBtn.disabled=atMin; thisBtn.hidden=atMin;
+  if (weekKey!==prev){ slots={}; if (sync) sync.rebind(weekKey); }
+  buildGrid(); paint();
+}
+prevBtn.onclick=function(){ showWeek(addDays(monday,-7)); };
+nextBtn.onclick=function(){ showWeek(addDays(monday,7)); };
+thisBtn.onclick=function(){ showWeek(minMonday()); };
+
+// ---------- day and week rollover ----------
+// Re-render when the day changes so yesterday's column drops off.
+// setView clamps, so a tab left on last week moves forward on its own.
 setInterval(function(){
-  var prev=weekKey; var prevH=nowHour;
+  var prevDay=todayCiv.getTime(), prevH=nowHour;
   computeWeek();
-  if (weekKey!==prev){
-    slots={}; document.getElementById("weekLabel").textContent=weekLabel();
-    buildGrid(); paint();
-    if (sync) sync.rebind(weekKey);
-  } else if (nowHour!==prevH){ paint(); }
+  if (todayCiv.getTime()!==prevDay) showWeek(monday);
+  else if (nowHour!==prevH) paint();
 }, 60000);
 
 // ---------- chrome ----------
@@ -417,8 +459,7 @@ var tT; function toast(m){ var t=document.getElementById("toast"); t.textContent
 
 // ---------- boot ----------
 computeWeek();
-document.getElementById("weekLabel").textContent=weekLabel();
-buildGrid(); paint(); showYou();
+showWeek(minMonday()); showYou();
 
 // ---------- public hooks for the sync module ----------
 window.CRX = {
@@ -466,7 +507,7 @@ if (!filled) {
   try {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
     const {
-      getFirestore, doc, setDoc, updateDoc, onSnapshot, deleteField,
+      getFirestore, doc, setDoc, onSnapshot, deleteField,
       collection, query, where, limit, getDocs, deleteDoc, documentId
     } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
 
@@ -475,10 +516,11 @@ if (!filled) {
 
     let stop = null;
 
-    async function bind(week){
+    // Browsing a week only listens; the doc is created on the first booking,
+    // so paging far ahead does not leave empty docs behind.
+    function bind(week){
       if (stop) { stop(); stop = null; }
       const ref = doc(db, "weeks", week);
-      await setDoc(ref, { week }, { merge:true });
       stop = onSnapshot(ref,
         snap => {
           const d = snap.data() || {};
@@ -491,17 +533,17 @@ if (!filled) {
 
     const adapter = {
       async write(patch){
-        const ref = doc(db, "weeks", CRX.weekKey());
-        const body = {};
-        for (const id in patch) body["slots." + id] = (patch[id] === null) ? deleteField() : patch[id];
-        await updateDoc(ref, body);
+        const week = CRX.weekKey();
+        const slots = {};
+        for (const id in patch) slots[id] = (patch[id] === null) ? deleteField() : patch[id];
+        await setDoc(doc(db, "weeks", week), { week, slots }, { merge:true });
       },
       rebind(week){ bind(week); }
     };
 
     CRX.attach(adapter);
     CRX.status("live","connecting…");
-    await bind(CRX.weekKey());
+    bind(CRX.weekKey());
 
     // housekeeping: drop week docs older than 3 weeks
     try {
