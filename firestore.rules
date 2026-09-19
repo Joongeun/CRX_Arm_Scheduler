@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// CRX Arm Scheduler
+//
+// There is no sign-in, so these rules cannot tell one visitor from another.
+// They do two useful things instead:
+//   1. Confine all access to the `weeks` collection. Nothing else in this
+//      Firestore project is reachable from the web page.
+//   2. Cap what a single week document may contain, so nobody can use the
+//      database as free file storage.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /weeks/{weekId} {
+      allow read: if true;
+
+      allow write: if
+        // document ids are always YYYY-MM-DD (the Monday of that week)
+        weekId.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        // a week holds at most the `week` and `slots` fields
+        && request.resource.data.keys().hasOnly(['week', 'slots'])
+        // 7 days x 24 hours is 168; leave headroom, block bulk junk
+        && request.resource.data.get('slots', {}).size() <= 200;
+    }
+
+    // everything else is closed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRX Arm Scheduler</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7f5; --surface:#fff; --surface-2:#eef0ec; --border:#e0e4dd; --line:#ebeee8;
+    --text:#171a15; --muted:#6a7161;
+    --accent:#1f8f5f; --accent-weak:#e6f4ec; --accent-border:#bfe3cf; --accent-text:#0d5637;
+    --past:#f0f1ed; --past-text:#a9ae9f;
+    --danger:#bd4630; --warn-bg:#fbf1e7; --warn-tx:#8a4a1f; --warn-bd:#f0d9be;
+    --shadow:0 1px 2px rgba(20,30,20,.05), 0 6px 20px rgba(20,30,20,.06);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#0e110d; --surface:#161a14; --surface-2:#1d221b; --border:#2a302a; --line:#232822;
+    --text:#e7eae4; --muted:#98a08d;
+    --accent:#40cc8b; --accent-weak:#12271c; --accent-border:#1f5539; --accent-text:#83e3b3;
+    --past:#141811; --past-text:#565c50;
+    --danger:#e0785f; --warn-bg:#241a10; --warn-tx:#e0a877; --warn-bd:#4a341c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.45);
+    color-scheme:dark;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0e110d; --surface:#161a14; --surface-2:#1d221b; --border:#2a302a; --line:#232822;
+    --text:#e7eae4; --muted:#98a08d;
+    --accent:#40cc8b; --accent-weak:#12271c; --accent-border:#1f5539; --accent-text:#83e3b3;
+    --past:#141811; --past-text:#565c50;
+    --danger:#e0785f; --warn-bg:#241a10; --warn-tx:#e0a877; --warn-bd:#4a341c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.45);
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased}
+
+  .shell{max-width:1240px;margin:0 auto;padding:24px 18px 60px}
+  header.top{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+  h1{margin:0;font-size:1.45rem;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:.9rem;margin-top:2px}
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--border);background:var(--surface)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .status.live .dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+  .status.live{color:var(--accent-text);border-color:var(--accent-border);background:var(--accent-weak)}
+  .status.off .dot{background:var(--warn-tx)}
+  .status.off{color:var(--warn-tx);border-color:var(--warn-bd);background:var(--warn-bg)}
+
+  .banner{margin-bottom:16px;padding:12px 15px;border-radius:12px;font-size:.88rem;background:var(--warn-bg);color:var(--warn-tx);border:1px solid var(--warn-bd)}
+  .banner code{background:rgba(0,0,0,.07);padding:1px 5px;border-radius:4px;font-size:.85em}
+  .banner[hidden]{display:none}
+
+  .layout{display:grid;grid-template-columns:238px 1fr;gap:20px;align-items:start}
+  @media (max-width:860px){ .layout{grid-template-columns:1fr} }
+
+  .side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
+  @media (max-width:860px){ .side{position:static} }
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+  .card h2{margin:0 0 8px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+  label.fl{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px}
+  input[type=text]{width:100%;font:inherit;font-size:.95rem;padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+  input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+  .youare{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.84rem;color:var(--muted)}
+  .chip{width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)}
+  .btn{width:100%;font:inherit;font-size:.86rem;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);color:var(--text);margin-top:9px}
+  .btn:hover{border-color:var(--accent);color:var(--accent-text)}
+  .btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+  .legend{display:flex;flex-direction:column;gap:7px;font-size:.81rem;color:var(--muted)}
+  .legend div{display:flex;align-items:center;gap:8px}
+  .sw{width:15px;height:15px;border-radius:4px;border:1px solid var(--border);flex:0 0 auto}
+  .sw.free{border-style:dashed;background:transparent}
+  .sw.mine{background:var(--accent-weak);border-color:var(--accent-border)}
+  .sw.other{background:#cfd6c8}
+  .sw.past{background:var(--past)}
+  .help{font-size:.79rem;color:var(--muted);line-height:1.5}
+  .help b{color:var(--text);font-weight:600}
+  .roster{display:flex;flex-wrap:wrap;gap:6px}
+  .rtag{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;padding:3px 9px 3px 5px;border-radius:999px;border:1px solid var(--border);background:var(--bg)}
+
+  .board{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .board-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .grid{display:grid;min-width:720px;touch-action:none;user-select:none;-webkit-user-select:none}
+  .hcell{position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--border);padding:9px 6px;text-align:center;font-size:.86rem;font-weight:600}
+  .hcell .dt{display:block;font-size:.72rem;font-weight:500;color:var(--muted);margin-top:1px}
+  .hcell.today{box-shadow:inset 0 -2px 0 var(--accent)}
+  .hcell.today .dt{color:var(--accent)}
+  .hcell.corner{left:0;z-index:4;border-right:1px solid var(--border)}
+  .tcell{position:sticky;left:0;z-index:2;background:var(--surface);border-right:1px solid var(--border);border-bottom:1px solid var(--line);
+         font-size:.74rem;color:var(--muted);text-align:right;padding:0 9px;display:flex;align-items:center;justify-content:flex-end;height:34px;white-space:nowrap}
+  .cell{border-right:1px solid var(--line);border-bottom:1px solid var(--line);height:34px;position:relative;overflow:hidden;cursor:pointer;display:flex;align-items:center;padding:0 7px}
+  .cell .nm{font-size:.75rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#12200f}
+  .cell.free:hover{background:var(--accent-weak)}
+  .cell.mine{outline:1px solid var(--accent-border);outline-offset:-1px}
+  .cell.past{background:var(--past);cursor:default}
+  .cell.past .nm{opacity:.5}
+  .cell.past:hover{background:var(--past)}
+  .cell.sel-claim{background:var(--accent)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+  .cell.sel-claim .nm{color:#fff}
+  .cell.sel-clear{background:repeating-linear-gradient(45deg,var(--danger),var(--danger) 5px,transparent 5px,transparent 9px)!important;opacity:.85}
+  .cell.locked{cursor:not-allowed}
+
+  footer.note{margin-top:16px;color:var(--muted);font-size:.79rem}
+  footer.note a{color:var(--accent-text)}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);background:var(--text);color:var(--bg);
+         padding:9px 16px;border-radius:10px;font-size:.86rem;font-weight:500;opacity:0;pointer-events:none;transition:.18s;z-index:30;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <div>
+      <h1>CRX Arm Scheduler</h1>
+      <div class="sub" id="weekLabel">—</div>
+    </div>
+    <div class="status off" id="status"><span class="dot"></span><span id="statusTxt">connecting…</span></div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="layout">
+    <aside class="side">
+      <div class="card">
+        <h2>Your name</h2>
+        <label class="fl" for="nameIn">Shown on every slot you take</label>
+        <input id="nameIn" type="text" maxlength="24" placeholder="e.g. Joon" autocomplete="name" spellcheck="false">
+        <div class="youare" id="youAre" hidden><span class="chip" id="youChip"></span><span id="youTxt"></span></div>
+        <button class="btn danger" id="clearMine" type="button">Release all my slots</button>
+      </div>
+
+      <div class="card">
+        <h2>How to book</h2>
+        <div class="help">
+          <b>Drag</b> across empty cells to claim a block.<br>
+          <b>Drag</b> across your own to release them.<br>
+          <b>Right-click</b> anyone's slot to force-clear it.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Key</h2>
+        <div class="legend">
+          <div><i class="sw free"></i> Free</div>
+          <div><i class="sw mine"></i> Yours</div>
+          <div><i class="sw other"></i> Someone else</div>
+          <div><i class="sw past"></i> Already passed</div>
+        </div>
+      </div>
+
+      <div class="card" id="rosterCard" hidden>
+        <h2>On the arm this week</h2>
+        <div class="roster" id="roster"></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="board"><div class="board-scroll"><div class="grid" id="grid"></div></div></div>
+      <footer class="note">
+        Times are US Pacific. The board clears itself every Monday at midnight — nobody has to reset it.
+      </footer>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CRX Arm Scheduler — UI layer (no build step, no framework)
+   Sync is plugged in by the module script at the bottom.
+   ============================================================ */
+(function(){
+"use strict";
+
+/* ---------- EDIT THESE TO CHANGE THE TIMETABLE ---------- */
+var START_HOUR = 8;          // first bookable hour (24h)
+var END_HOUR   = 22;         // last hour ENDS here, so 22 => last row is 21:00–22:00
+var DAY_COUNT  = 7;          // 7 = Mon–Sun, 5 = Mon–Fri
+var TIMEZONE   = "America/Los_Angeles";
+/* -------------------------------------------------------- */
+
+var DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+var HOURS = []; for (var h=START_HOUR; h<END_HOUR; h++) HOURS.push(h);
+
+// ---------- identity ----------
+var LS_NAME="crx.name", LS_CID="crx.cid";
+var myCid = localStorage.getItem(LS_CID);
+if (!myCid){ myCid = "c"+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); localStorage.setItem(LS_CID,myCid); }
+var myName = localStorage.getItem(LS_NAME) || "";
+
+// ---------- week math (Pacific, Monday-start) ----------
+var weekKey, monday, todayCiv, nowHour, todayIdx;
+function tzNow(){
+  var p={}; new Intl.DateTimeFormat("en-CA",{timeZone:TIMEZONE,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23"})
+    .formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
+  return {y:+p.year,m:+p.month,d:+p.day,h:+p.hour};
+}
+function pad(n){return (n<10?"0":"")+n;}
+function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function addDays(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
+function computeWeek(){
+  var n=tzNow(); var civ=new Date(n.y,n.m-1,n.d);
+  todayIdx=(civ.getDay()+6)%7; monday=addDays(civ,-todayIdx); todayCiv=civ; nowHour=n.h;
+  weekKey=ymd(monday);
+}
+function dayDate(i){return addDays(monday,i);}
+function isPast(i,h){
+  var c=dayDate(i).getTime(), t=todayCiv.getTime();
+  if (c<t) return true;
+  if (c===t && nowHour>=h+1) return true;
+  return false;
+}
+function cellId(i,h){return "d"+i+"h"+h;}
+function weekLabel(){
+  var a=monday,b=addDays(monday,DAY_COUNT-1),o={month:"short",day:"numeric"};
+  return a.toLocaleDateString("en-US",o)+" – "+b.toLocaleDateString("en-US",o)+", "+b.getFullYear();
+}
+
+// ---------- state ----------
+var slots = {};              // cellId -> {name, cid, ts}
+var sync  = null;            // set by the sync module
+var demo  = true;
+
+// ---------- color from name ----------
+function hue(s){ var x=0; for(var i=0;i<s.length;i++) x=(x*31+s.charCodeAt(i))>>>0; return x%360; }
+function colorFor(n){ var d=document.documentElement; var dark=getComputedStyle(d).getPropertyValue("--bg").trim()==="#0e110d";
+  return "hsl("+hue(n||"?")+" 52% "+(dark?"34%":"76%")+")"; }
+
+// ---------- build grid ----------
+var gridEl=document.getElementById("grid");
+function buildGrid(){
+  gridEl.innerHTML="";
+  gridEl.style.gridTemplateColumns="70px repeat("+DAY_COUNT+",minmax(88px,1fr))";
+  var corner=document.createElement("div"); corner.className="hcell corner"; gridEl.appendChild(corner);
+  for (var i=0;i<DAY_COUNT;i++){
+    var hc=document.createElement("div"); hc.className="hcell"+(i===todayIdx?" today":"");
+    hc.innerHTML=DAY_NAMES[i]+'<span class="dt">'+dayDate(i).toLocaleDateString("en-US",{month:"numeric",day:"numeric"})+'</span>';
+    gridEl.appendChild(hc);
+  }
+  HOURS.forEach(function(h){
+    var tc=document.createElement("div"); tc.className="tcell"; tc.textContent=fmtHour(h); gridEl.appendChild(tc);
+    for (var i=0;i<DAY_COUNT;i++){
+      var c=document.createElement("div"); c.className="cell";
+      c.dataset.d=i; c.dataset.h=h; c.dataset.id=cellId(i,h);
+      c.appendChild(Object.assign(document.createElement("span"),{className:"nm"}));
+      gridEl.appendChild(c);
+    }
+  });
+}
+function fmtHour(h){ var ap=h<12?"AM":"PM", d=h%12; if(d===0)d=12; return d+" "+ap; }
+
+// ---------- paint ----------
+function paint(){
+  var names={};
+  gridEl.querySelectorAll(".cell").forEach(function(c){
+    var i=+c.dataset.d, h=+c.dataset.h, id=c.dataset.id, rec=slots[id];
+    var past=isPast(i,h);
+    c.className="cell"+(past?" past":"");
+    var nm=c.firstChild;
+    if (rec){
+      names[rec.name]=1;
+      c.style.background=colorFor(rec.name);
+      nm.textContent=rec.name;
+      if (rec.cid===myCid){ c.classList.add("mine"); }
+      else { c.classList.add("locked"); }
+    } else {
+      c.style.background=""; nm.textContent="";
+      c.classList.add("free");
+    }
+  });
+  drawRoster(Object.keys(names));
+}
+function drawRoster(list){
+  var card=document.getElementById("rosterCard"), box=document.getElementById("roster");
+  if (!list.length){ card.hidden=true; return; }
+  card.hidden=false; box.innerHTML="";
+  list.sort().forEach(function(n){
+    var t=document.createElement("span"); t.className="rtag";
+    var c=document.createElement("i"); c.className="chip"; c.style.background=colorFor(n);
+    var s=document.createElement("span"); s.textContent=n;
+    t.appendChild(c); t.appendChild(s); box.appendChild(t);
+  });
+}
+
+// ---------- drag selection ----------
+var drag=null;
+gridEl.addEventListener("pointerdown", function(e){
+  var c=e.target.closest(".cell"); if(!c) return;
+  if (c.classList.contains("past")) return;
+  if (e.button===2) return;                       // right-click handled separately
+  var rec=slots[c.dataset.id];
+  var mode = !rec ? "claim" : (rec.cid===myCid ? "clear" : null);
+  if (mode==="claim" && !requireName()) return;
+  if (!mode){ toast(rec.name+" has that slot. Right-click to force-clear."); return; }
+  drag={mode:mode, a:{d:+c.dataset.d,h:+c.dataset.h}, b:{d:+c.dataset.d,h:+c.dataset.h}};
+  gridEl.setPointerCapture(e.pointerId);
+  preview(); e.preventDefault();
+});
+gridEl.addEventListener("pointermove", function(e){
+  if(!drag) return;
+  var el=document.elementFromPoint(e.clientX,e.clientY);
+  var c=el && el.closest ? el.closest(".cell") : null;
+  if (c){ drag.b={d:+c.dataset.d,h:+c.dataset.h}; preview(); }
+  e.preventDefault();
+});
+function endDrag(e){
+  if(!drag) return;
+  var picked=rectCells(); var mode=drag.mode; drag=null;
+  gridEl.querySelectorAll(".sel-claim,.sel-clear").forEach(function(c){c.classList.remove("sel-claim","sel-clear");});
+  commit(mode,picked);
+  if (e) try{ gridEl.releasePointerCapture(e.pointerId); }catch(_){}
+}
+gridEl.addEventListener("pointerup",endDrag);
+gridEl.addEventListener("pointercancel",endDrag);
+window.addEventListener("blur",function(){endDrag(null);});
+
+function rectCells(){
+  if(!drag) return [];
+  var d0=Math.min(drag.a.d,drag.b.d), d1=Math.max(drag.a.d,drag.b.d);
+  var h0=Math.min(drag.a.h,drag.b.h), h1=Math.max(drag.a.h,drag.b.h);
+  var out=[];
+  for(var d=d0;d<=d1;d++) for(var h=h0;h<=h1;h++){
+    if (isPast(d,h)) continue;
+    var id=cellId(d,h), rec=slots[id];
+    if (drag.mode==="claim" && !rec) out.push(id);
+    if (drag.mode==="clear" && rec && rec.cid===myCid) out.push(id);
+  }
+  return out;
+}
+function preview(){
+  var set={}; rectCells().forEach(function(id){set[id]=1;});
+  var cls=drag.mode==="claim"?"sel-claim":"sel-clear";
+  gridEl.querySelectorAll(".cell").forEach(function(c){
+    c.classList.remove("sel-claim","sel-clear");
+    if (set[c.dataset.id]) c.classList.add(cls);
+  });
+}
+
+// right-click force clear
+gridEl.addEventListener("contextmenu", function(e){
+  var c=e.target.closest(".cell"); if(!c) return;
+  var rec=slots[c.dataset.id]; if(!rec) return;
+  e.preventDefault();
+  if (rec.cid===myCid){ commit("clear",[c.dataset.id]); return; }
+  if (confirm("Clear "+rec.name+"'s "+DAY_NAMES[+c.dataset.d]+" "+fmtHour(+c.dataset.h)+" slot?")) commit("clear",[c.dataset.id]);
+});
+
+// ---------- commit ----------
+function commit(mode, ids){
+  if(!ids.length) return;
+  var patch={};
+  ids.forEach(function(id){
+    if (mode==="claim"){ var r={name:myName,cid:myCid,ts:Date.now()}; slots[id]=r; patch[id]=r; }
+    else { delete slots[id]; patch[id]=null; }
+  });
+  paint();
+  if (sync) sync.write(patch).catch(function(err){ toast("Sync failed — your change may not have saved."); console.error(err); });
+}
+
+document.getElementById("clearMine").onclick=function(){
+  var ids=Object.keys(slots).filter(function(id){return slots[id].cid===myCid;});
+  if(!ids.length){ toast("You don't have any slots this week."); return; }
+  if(!confirm("Release all "+ids.length+" of your slots this week?")) return;
+  commit("clear",ids);
+};
+
+// ---------- name ----------
+var nameIn=document.getElementById("nameIn");
+nameIn.value=myName;
+nameIn.addEventListener("input",function(){
+  myName=nameIn.value.trim().slice(0,24);
+  localStorage.setItem(LS_NAME,myName);
+  showYou();
+});
+nameIn.addEventListener("change",function(){
+  // rename my existing slots so the board stays consistent
+  var ids=Object.keys(slots).filter(function(id){return slots[id].cid===myCid && slots[id].name!==myName;});
+  if(myName && ids.length) commit("claim",ids);
+});
+function showYou(){
+  var box=document.getElementById("youAre");
+  if(!myName){ box.hidden=true; return; }
+  box.hidden=false;
+  document.getElementById("youChip").style.background=colorFor(myName);
+  document.getElementById("youTxt").textContent="This is your color";
+}
+function requireName(){
+  if (myName) return true;
+  nameIn.focus(); toast("Type your name first — it goes on the slot.");
+  return false;
+}
+
+// ---------- weekly rollover ----------
+setInterval(function(){
+  var prev=weekKey; var prevH=nowHour;
+  computeWeek();
+  if (weekKey!==prev){
+    slots={}; document.getElementById("weekLabel").textContent=weekLabel();
+    buildGrid(); paint();
+    if (sync) sync.rebind(weekKey);
+  } else if (nowHour!==prevH){ paint(); }
+}, 60000);
+
+// ---------- chrome ----------
+function setStatus(kind,txt){
+  var el=document.getElementById("status");
+  el.className="status "+kind; document.getElementById("statusTxt").textContent=txt;
+}
+function banner(html){ var b=document.getElementById("banner"); b.innerHTML=html; b.hidden=false; }
+var tT; function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show");
+  clearTimeout(tT); tT=setTimeout(function(){t.classList.remove("show");},2800); }
+
+// ---------- boot ----------
+computeWeek();
+document.getElementById("weekLabel").textContent=weekLabel();
+buildGrid(); paint(); showYou();
+
+// ---------- public hooks for the sync module ----------
+window.CRX = {
+  weekKey:function(){ return weekKey; },
+  attach:function(adapter){ sync=adapter; demo=false; },
+  remote:function(map){ slots = map || {}; paint(); },
+  status:setStatus,
+  banner:banner,
+  toast:toast,
+  demoNotice:function(msg){ demo=true; setStatus("off","local only"); banner(msg); }
+};
+
+// if no sync module connects within 6s, say so plainly
+setTimeout(function(){
+  if (demo) window.CRX.demoNotice(
+    "<b>Not syncing.</b> This board is only saved in this browser tab. Add your Firebase config in <code>index.html</code> (see README) to make it shared and live."
+  );
+}, 6000);
+
+})();
+</script>
+
+<script type="module">
+/* ============================================================
+   Sync layer — Firebase Firestore.
+   PASTE YOUR CONFIG BELOW. Everything else is done.
+   These values are NOT secrets; they are meant to ship in
+   client code. Access is controlled by Firestore rules.
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey:            "PASTE_API_KEY",
+  authDomain:        "PASTE_PROJECT.firebaseapp.com",
+  projectId:         "PASTE_PROJECT_ID",
+  storageBucket:     "PASTE_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId:             "PASTE_APP_ID"
+};
+/* ========================================================== */
+
+const filled = !String(FIREBASE_CONFIG.projectId).startsWith("PASTE");
+if (!filled) {
+  // leave the app in local-only mode; the 6s notice explains it
+} else {
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const {
+      getFirestore, doc, setDoc, updateDoc, onSnapshot, deleteField,
+      collection, query, where, limit, getDocs, deleteDoc, documentId
+    } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+
+    const app = initializeApp(FIREBASE_CONFIG);
+    const db  = getFirestore(app);
+
+    let stop = null;
+
+    async function bind(week){
+      if (stop) { stop(); stop = null; }
+      const ref = doc(db, "weeks", week);
+      await setDoc(ref, { week }, { merge:true });
+      stop = onSnapshot(ref,
+        snap => {
+          const d = snap.data() || {};
+          CRX.remote(d.slots || {});
+          CRX.status("live", "live · shared");
+        },
+        err => { CRX.status("off","offline"); console.error(err); }
+      );
+    }
+
+    const adapter = {
+      async write(patch){
+        const ref = doc(db, "weeks", CRX.weekKey());
+        const body = {};
+        for (const id in patch) body["slots." + id] = (patch[id] === null) ? deleteField() : patch[id];
+        await updateDoc(ref, body);
+      },
+      rebind(week){ bind(week); }
+    };
+
+    CRX.attach(adapter);
+    CRX.status("live","connecting…");
+    await bind(CRX.weekKey());
+
+    // housekeeping: drop week docs older than 3 weeks
+    try {
+      const cut = new Date(Date.now() - 21*864e5);
+      const key = cut.getFullYear()+"-"+String(cut.getMonth()+1).padStart(2,"0")+"-"+String(cut.getDate()).padStart(2,"0");
+      const old = await getDocs(query(collection(db,"weeks"), where(documentId(),"<",key), limit(5)));
+      for (const d of old.docs) await deleteDoc(d.ref);
+    } catch(_) {}
+
+  } catch (err) {
+    console.error(err);
+    CRX.demoNotice("<b>Couldn't reach Firebase.</b> Check your config values and that Firestore is enabled. Your changes are staying in this browser only.");
+  }
+}
+</script>
+</body>
+</html>
